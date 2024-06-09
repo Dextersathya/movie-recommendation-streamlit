@@ -1,60 +1,79 @@
-import flask
-#import difflib
+import streamlit as st
 import pandas as pd
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-app = flask.Flask(__name__, template_folder='templates')
+# Load the dataset
+df2 = pd.read_csv("./model/tmdb.csv")
 
-df2 = pd.read_csv('./model/tmdb.csv')
-
-count = CountVectorizer(stop_words='english')
-count_matrix = count.fit_transform(df2['soup'])
-
+# Create the count matrix and compute the cosine similarity matrix
+count = CountVectorizer(stop_words="english")
+count_matrix = count.fit_transform(df2["soup"])
 cosine_sim2 = cosine_similarity(count_matrix, count_matrix)
 
+# Reset the dataframe index and create a series for the indices
 df2 = df2.reset_index()
-indices = pd.Series(df2.index, index=df2['title'])
-all_titles = [df2['title'][i] for i in range(len(df2['title']))]
+indices = pd.Series(df2.index, index=df2["title"])
+all_titles = [df2["title"][i] for i in range(len(df2["title"]))]
 
 
+# Function to get recommendations
 def get_recommendations(title):
-    cosine_sim = cosine_similarity(count_matrix, count_matrix)
     idx = indices[title]
-    sim_scores = list(enumerate(cosine_sim[idx]))
+    sim_scores = list(enumerate(cosine_sim2[idx]))
     sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
     sim_scores = sim_scores[1:11]
     movie_indices = [i[0] for i in sim_scores]
-    tit = df2['title'].iloc[movie_indices]
-    dat = df2['release_date'].iloc[movie_indices]
-    return_df = pd.DataFrame(columns=['Title', 'Year'])
-    return_df['Title'] = tit
-    return_df['Year'] = dat
+    tit = df2["title"].iloc[movie_indices]
+    dat = df2["release_date"].iloc[movie_indices]
+    return_df = pd.DataFrame(columns=["Title", "Year"])
+    return_df["Title"] = tit
+    return_df["Year"] = dat
     return return_df
 
 
-# Set up the main route
-@app.route('/', methods=['GET', 'POST'])
+# Function to get the image path
+def get_image_path():
+    return "templates/back.jpeg"
+
+
+# Streamlit app
 def main():
-    if flask.request.method == 'GET':
-        return (flask.render_template('index.html'))
+    # Set the title and background image
+    st.title("Movie Recommender System")
+    page_bg_img = (
+        """
+    <style>
+    body {
+        background-image: url("%s");
+        background-size: cover;
+        background-position: center;
+    }
+    </style>
+    """
+        % get_image_path()
+    )
+    st.markdown(page_bg_img, unsafe_allow_html=True)
 
-    if flask.request.method == 'POST':
-        m_name = flask.request.form['movie_name']
-        m_name = m_name.title()
-        #        check = difflib.get_close_matches(m_name,all_titles,cutout=0.50,n=1)
-        if m_name not in all_titles:
-            return (flask.render_template('negative.html', name=m_name))
-        else:
-            result_final = get_recommendations(m_name)
-            names = []
-            dates = []
-            for i in range(len(result_final)):
-                names.append(result_final.iloc[i][0])
-                dates.append(result_final.iloc[i][1])
+    st.write("Select a movie to get recommendations:")
 
-            return flask.render_template('positive.html', movie_names=names, movie_date=dates, search_name=m_name)
+    # Add an empty option at the beginning of the list
+    all_titles_with_empty = [""] + all_titles
+
+    # Create a form for the input and submit button
+    with st.form(key="movie_form"):
+        movie_name = st.selectbox("Choose a movie", all_titles_with_empty)
+        submit_button = st.form_submit_button(label="Get Recommendations")
+
+    # Show recommendations if the form is submitted and a movie is selected
+    if submit_button and movie_name:
+        result_final = get_recommendations(movie_name)
+        st.write(f"Recommendations for '{movie_name}':")
+        for i in range(len(result_final)):
+            st.write(
+                f"{result_final.iloc[i]['Title']} ({result_final.iloc[i]['Year']})"
+            )
 
 
-if __name__ == '__main__':
-    app.run()
+if __name__ == "__main__":
+    main()
